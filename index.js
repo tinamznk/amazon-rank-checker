@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer';
 import dotenv from 'dotenv';
+import fs from 'fs';
 dotenv.config();
 
 // Danh sách từ khóa & ASIN cần check
@@ -13,11 +14,33 @@ const KEYWORDS = [
 ];
 async function checkKeywordRank(browser, keyword, asin) {
   const page = await browser.newPage();
+
+  // Thêm User-Agent
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+  );
+
+  // Nạp cookies từ file (nếu có)
+  const cookiesPath = './cookies.json';
+  if (fs.existsSync(cookiesPath)) {
+    const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf-8'));
+    await page.setCookie(...cookies);
+    console.log("🍪 Cookies loaded.");
+  }
+
   let found = null;
 
   for (let pageNum = 1; pageNum <= 3; pageNum++) {
     const url = `https://www.amazon.com/s?k=${encodeURIComponent(keyword)}&page=${pageNum}`;
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    } catch (err) {
+      console.error(`❌ Error loading ${url}:`, err.message);
+      continue;
+    }
+
+    await page.waitForTimeout(2000); // Delay nhẹ tránh bị chặn
 
     const products = await page.$$eval('div[data-component-type="s-search-result"]', nodes =>
       nodes.map(node => {
@@ -41,6 +64,7 @@ async function checkKeywordRank(browser, keyword, asin) {
   await page.close();
   return { keyword, asin, rank: found || "Not in Top 150" };
 }
+
 
 async function main() {
   console.log("✅ Starting Amazon Rank Checker Script...");
