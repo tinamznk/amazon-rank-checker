@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import dotenv from 'dotenv';
 import fs from 'fs';
+
 dotenv.config();
 
 // Danh sách từ khóa & ASIN cần check
@@ -15,12 +16,12 @@ const KEYWORDS = [
 async function checkKeywordRank(browser, keyword, asin) {
   const page = await browser.newPage();
 
-  // Thêm User-Agent
+  // 🛡 Set user-agent để giả lập người dùng thật
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
   );
 
-  // Nạp cookies từ file (nếu có)
+  // 🍪 Load cookies nếu có
   const cookiesPath = './cookies.json';
   if (fs.existsSync(cookiesPath)) {
     const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf-8'));
@@ -32,31 +33,34 @@ async function checkKeywordRank(browser, keyword, asin) {
 
   for (let pageNum = 1; pageNum <= 3; pageNum++) {
     const url = `https://www.amazon.com/s?k=${encodeURIComponent(keyword)}&page=${pageNum}`;
-
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    } catch (err) {
-      console.error(`❌ Error loading ${url}:`, err.message);
-      continue;
-    }
 
-    await page.waitForTimeout(2000); // Delay nhẹ tránh bị chặn
+      // Delay nhẹ để Amazon không nghi ngờ bot
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const products = await page.$$eval('div[data-component-type="s-search-result"]', nodes =>
-      nodes.map(node => {
-        const asin = node.getAttribute("data-asin");
-        const hasPrice = node.querySelector(".a-price") !== null;
-        const isVideo = node.innerHTML.includes("video-block") || node.innerText.toLowerCase().includes("video");
-        return { asin, hasPrice, isVideo };
-      }).filter(p => p.asin && p.hasPrice && !p.isVideo)
-    );
+      const products = await page.$$eval('div[data-component-type="s-search-result"]', nodes =>
+        nodes.map(node => {
+          const asin = node.getAttribute("data-asin");
+          const hasPrice = node.querySelector(".a-price") !== null;
+          const isVideo = node.innerHTML.includes("video-block") || node.innerText.toLowerCase().includes("video");
+          return { asin, hasPrice, isVideo };
+        }).filter(p => p.asin && p.hasPrice && !p.isVideo)
+      );
 
-    for (let i = 0; i < products.length; i++) {
-      if (products[i].asin === asin) {
-        found = `Page ${pageNum}, No ${i + 1}`;
-        break;
+      for (let i = 0; i < products.length; i++) {
+        if (products[i].asin === asin) {
+          found = `Page ${pageNum}, No ${i + 1}`;
+          break;
+        }
       }
+
+    } catch (err) {
+      console.error(`❌ Error loading ${url}: ${err.message}`);
     }
+
+    // Delay giữa các trang
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     if (found) break;
   }
@@ -64,7 +68,6 @@ async function checkKeywordRank(browser, keyword, asin) {
   await page.close();
   return { keyword, asin, rank: found || "Not in Top 150" };
 }
-
 
 async function main() {
   console.log("✅ Starting Amazon Rank Checker Script...");
