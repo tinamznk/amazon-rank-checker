@@ -16,10 +16,14 @@ const KEYWORDS = [
 async function checkKeywordRank(browser, keyword, asin) {
   const page = await browser.newPage();
 
-  // 🛡 Set user-agent để giả lập người dùng thật
+  // 🛡 Giả lập trình duyệt thật
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
   );
+
+  await page.setExtraHTTPHeaders({
+    'accept-language': 'en-US,en;q=0.9'
+  });
 
   // 🍪 Load cookies nếu có
   const cookiesPath = './cookies.json';
@@ -36,7 +40,7 @@ async function checkKeywordRank(browser, keyword, asin) {
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-      // Delay nhẹ để Amazon không nghi ngờ bot
+      // Delay nhẹ để tránh bị chặn
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const products = await page.$$eval('div[data-component-type="s-search-result"]', nodes =>
@@ -59,8 +63,7 @@ async function checkKeywordRank(browser, keyword, asin) {
       console.error(`❌ Error loading ${url}: ${err.message}`);
     }
 
-    // Delay giữa các trang
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 3000)); // delay giữa các lần gọi
 
     if (found) break;
   }
@@ -73,13 +76,16 @@ async function main() {
   console.log("✅ Starting Amazon Rank Checker Script...");
 
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: "new", // dùng renderer mới để tránh lỗi detached frame
     executablePath: '/usr/bin/chromium',
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-infobars",
+      "--window-size=1920,1080",
       "--no-zygote",
       "--single-process"
     ]
